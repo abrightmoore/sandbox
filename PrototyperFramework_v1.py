@@ -2,6 +2,7 @@
 
 import pygame
 import math
+import random
 pygame.init()
 
 class PaperLens:
@@ -84,9 +85,16 @@ class View2DLens:
 			self.things[pos].append(thing)  #  TODO: Optimise for search
 		self.things[pos] = [thing]
 
-	def get_at(self, pos, thing):
+	def get_at(self, pos):
 		if pos in self.things:
 			return self.things[pos]
+		else:
+			return []
+	
+	def erase_at(self, pos):
+		if pos in self.things:
+			self.things[pos] = []
+			del self.things[pos]
 	
 	def fill(self, thing):
 		for col in xrange(0, self.height):
@@ -126,6 +134,72 @@ class RendererLens:
 		# Handle scaling the 
 		self.display.blit(pygame.transform.scale(self.view.get_image2D(None), size), pos)
 
+def game_of_life(): # Conway game of Life
+	size = width,height = 800,800  # Pygame
+	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
+	r.set_view(View2DLens())
+	play_size = 100
+	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
+	alive = CharacterCellLens("alive")
+	alive.paper.add_frame(pygame.image.load("alive_frame2.png"))
+	dead = CharacterCellLens("dead")
+	
+	# Initialise the playzone
+	for col in xrange(0, play_size):
+		for row in xrange(0, play_size):
+			if random.random() > 0.8:
+				r.view.set_at((row, col), alive)
+
+	keepGoing = True
+	iterations = 0
+	pause = True
+	while keepGoing:
+		if pause == False:
+			alive.tick()
+			iterations += 1
+			
+			r.draw([0,0],[width>>3,height>>3])
+			r.draw([width>>3,height>>3],[width>>2,height>>2])
+			r.draw([(width>>3)+(width>>2),(height>>3)+(height>>2)],[width>>1,height>>1])
+			r.draw([width-(width>>3),height-(height>>3)],[width>>3,height>>3])
+			
+			#  Game logic
+			cells_new = {}
+			cells_die = {}
+			
+			for col in xrange(0, play_size):
+				for row in xrange(0, play_size):
+					num_neighbors = 0
+					for dx in xrange(-1,2):
+						for dy in xrange(-1,2):
+							if alive in r.view.get_at((row+dy,col+dx)) and not (dx == 0 and dy ==0):
+								num_neighbors += 1
+					if (num_neighbors < 2 or num_neighbors > 3) and (alive in r.view.get_at((row, col))):
+						cells_die[(row,col)] = False
+					elif num_neighbors == 3 and not (alive in r.view.get_at((row, col))):
+						cells_new[(row,col)] = True
+
+			for pos in cells_new:
+				r.view.erase_at(pos)
+				r.view.set_at(pos, alive)
+
+			for pos in cells_die:
+				r.view.erase_at(pos)
+				r.view.set_at(pos, dead)
+			
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				keepGoing = False
+			elif event.type == pygame.MOUSEBUTTONUP:
+				if event.button == 1: # 1 == Left
+					pause = not pause
+					(px,py) = event.pos
+
+				
+game_of_life()
+
 def test_harness():
 	player_display = pygame.display.set_mode((800, 400),pygame.SRCALPHA)  # Pygame
 	r1 = RendererLens(player_display)
@@ -163,5 +237,3 @@ def test_harness():
 		c.tick()
 		d.tick()
 
-		
-test_harness()
