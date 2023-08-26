@@ -74,12 +74,15 @@ class View2DLens:
 		self.cell_width = 8
 		self.cell_height = 8
 		self.things = {}
+		self.surface_cache = None
 		
 	def set_size(self, size, cell_size):
+		self.surface_cache = None  # Invalidate cache
 		self.width, self.height, self.layer, self.time = size
 		self.cell_width, self.cell_height = cell_size
 		
 	def set_at(self, pos, thing):
+		self.surface_cache = None  # Invalidate cache
 		#  Add this thing to the position at the end of the list
 		if pos in self.things:
 			self.things[pos].append(thing)  #  TODO: Optimise for search
@@ -92,11 +95,13 @@ class View2DLens:
 			return []
 	
 	def erase_at(self, pos):
+		self.surface_cache = None  # Invalidate cache
 		if pos in self.things:
 			self.things[pos] = []
 			del self.things[pos]
 	
 	def fill(self, thing):
+		self.surface_cache = None  # Invalidate cache
 		for col in xrange(0, self.height):
 			for row in xrange(0, self.width):
 				self.set_at((row,col), thing)
@@ -105,7 +110,10 @@ class View2DLens:
 		return pygame.Surface((self.cell_width*self.width, self.cell_height*self.height), pygame.SRCALPHA)
 	
 	def get_image2D(self, surface):
-		#  Render this view to a suitably sized surface
+		if self.surface_cache is not None:
+			return self.surface_cache
+			
+		#  Otherwise Render this view to a suitably sized surface
 		if surface == None:
 			surface = self.get_template2D()
 		#  For each pos we know about, render the thing to the image
@@ -116,6 +124,7 @@ class View2DLens:
 					px = x*self.cell_width
 					py = surface.get_height()-(y+1)*self.cell_height  #  Top left is 0
 					ob.draw2D(surface, (px, py), (self.cell_width, self.cell_height))
+		self.surface_cache = surface
 		return surface
 
 class RendererLens:
@@ -134,6 +143,51 @@ class RendererLens:
 		# Handle scaling the 
 		self.display.blit(pygame.transform.scale(self.view.get_image2D(None), size), pos)
 
+
+# Custom stuff
+
+def space_junk():  #  Messing about space-themed salvage
+	size = width,height = 800,800  # Pygame
+	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
+	r.set_view(View2DLens())
+	play_size = 50
+	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
+	
+	# Set up tiles
+	font_cells = "0123456789abcdefghijklmnopqrstuvwxyz"
+	tiles = []
+	for c in font_cells:
+		t = CharacterCellLens("font/"+str(c))
+		tiles.append(t)
+
+	for col in xrange(0, play_size):
+		for row in xrange(0, play_size):
+			if random.random() > 0.7:
+				r.view.set_at((row, col), tiles[random.randint(0, len(tiles)-1)])
+
+	keepGoing = True
+	iterations = 0
+	pause = False
+	while keepGoing:
+		if pause == False:
+			iterations += 1
+			
+			r.draw([0,0],[width, height])
+			
+			
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				keepGoing = False
+			elif event.type == pygame.MOUSEBUTTONUP:
+				if event.button == 1: # 1 == Left
+					pause = not pause
+					(px,py) = event.pos
+
+space_junk()
+	
+	
 def game_of_life(): # Conway game of Life
 	size = width,height = 800,800  # Pygame
 	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
