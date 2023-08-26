@@ -37,7 +37,7 @@ class PaperLens:
 	def get_scaled(self, size):
 		if size not in self.cache:
 			width_scale, height_scale = size
-			self.cache[((size,self.frame), self.frame)] = pygame.transform.scale(self.base_image[self.frame], [width_scale, height_scale])
+			self.cache[(size,self.frame)] = pygame.transform.scale(self.base_image[self.frame], [width_scale, height_scale])
 		return self.cache[(size,self.frame)]
 		
 	def destroy_cache(self):
@@ -138,7 +138,7 @@ def game_of_life(): # Conway game of Life
 	size = width,height = 800,800  # Pygame
 	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
 	r.set_view(View2DLens())
-	play_size = 100
+	play_size = 50
 	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
 	alive = CharacterCellLens("alive")
 	alive.paper.add_frame(pygame.image.load("alive_frame2.png"))
