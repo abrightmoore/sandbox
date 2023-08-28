@@ -3,6 +3,8 @@
 import pygame
 import math
 import random
+import glob
+import os
 pygame.init()
 
 class PaperLens:
@@ -48,7 +50,7 @@ class CharacterCellLens:
 		This is a render helper whose job is to place a lens over an object
 	'''
 	def __init__(self, id):
-		self.id = id #  TODO: This is where to protect against file system read exploits.
+		self.id = str(id.replace("\\"," ").replace("/"," ")) #  TODO: This is where to protect against file system read exploits.
 		self.filename = str(id)+".png"
 		self.paper = PaperLens(pygame.image.load(self.filename))
 	
@@ -74,19 +76,37 @@ class View2DLens:
 		self.cell_width = 8
 		self.cell_height = 8
 		self.things = {}
+		self.invalidate()
+		self.colour_bg = (0,0,0,255)
+
+	def invalidate(self):
 		self.surface_cache = None
-		
+
+	def get_cells(self):
+		return list(self.things.keys())
+
 	def set_size(self, size, cell_size):
-		self.surface_cache = None  # Invalidate cache
+		self.invalidate()  # Invalidate cache
 		self.width, self.height, self.layer, self.time = size
 		self.cell_width, self.cell_height = cell_size
 		
 	def set_at(self, pos, thing):
-		self.surface_cache = None  # Invalidate cache
+		self.invalidate()  # Invalidate cache
 		#  Add this thing to the position at the end of the list
 		if pos in self.things:
 			self.things[pos].append(thing)  #  TODO: Optimise for search
-		self.things[pos] = [thing]
+		else:
+			self.things[pos] = [thing]
+
+	def remove(self, pos, thing):
+		self.invalidate()  # Invalidate cache
+		if pos in self.things:
+#			for i in xrange(0, len(self.things[pos])):
+			if thing in self.things[pos]:
+#				if self.things[pos][i] == thing:
+#					self.things[pos][i] = None
+				ar = self.things[pos]
+				ar.remove(thing)
 
 	def get_at(self, pos):
 		if pos in self.things:
@@ -95,22 +115,39 @@ class View2DLens:
 			return []
 	
 	def erase_at(self, pos):
-		self.surface_cache = None  # Invalidate cache
+		self.invalidate()  # Invalidate cache
 		if pos in self.things:
 			self.things[pos] = []
 			del self.things[pos]
 	
 	def fill(self, thing):
-		self.surface_cache = None  # Invalidate cache
+		self.invalidate()  # Invalidate cache
 		for col in xrange(0, self.height):
 			for row in xrange(0, self.width):
 				self.set_at((row,col), thing)
 	
+	def fill_area(self, thing, pos, size):
+		self.invalidate()  # Invalidate cache
+		
+		x,y = pos
+		width, height = size
+		
+		for col in xrange(y, y+height):
+			for row in xrange(x, x+width):
+				self.set_at((row,col), thing)
+
+	def draw_label(self, label, pos):
+		self.invalidate()
+		x, y = pos
+		label.place(self, pos)
+
 	def get_template2D(self):
-		return pygame.Surface((self.cell_width*self.width, self.cell_height*self.height), pygame.SRCALPHA)
+		surf = pygame.Surface((self.cell_width*self.width, self.cell_height*self.height), pygame.SRCALPHA)
+		surf.fill(self.colour_bg)
+		return surf
 	
 	def get_image2D(self, surface):
-		if self.surface_cache is not None:
+		if self.surface_cache != None:
 			return self.surface_cache
 			
 		#  Otherwise Render this view to a suitably sized surface
@@ -118,12 +155,19 @@ class View2DLens:
 			surface = self.get_template2D()
 		#  For each pos we know about, render the thing to the image
 		for pos in self.things:
-			 for ob in self.things[pos]:
-				if ob is not None:
-					x, y = pos
-					px = x*self.cell_width
-					py = surface.get_height()-(y+1)*self.cell_height  #  Top left is 0
-					ob.draw2D(surface, (px, py), (self.cell_width, self.cell_height))
+			if len(self.things[pos]) > 0:
+				x, y = pos
+				px = x*self.cell_width
+				py = surface.get_height()-(y+1)*self.cell_height  #  Top left is 0
+
+				for ob in self.things[pos]:
+
+					if ob is not None:
+						ob.draw2D(surface, (px, py), (self.cell_width, self.cell_height))
+
+				if len(self.things[pos]) > 1:  # Are there more than two items in this location?
+					pygame.draw.rect(surface, (255,0,0,255), [px, py, self.cell_width, self.cell_height], 1)
+				
 		self.surface_cache = surface
 		return surface
 
@@ -143,10 +187,162 @@ class RendererLens:
 		# Handle scaling the 
 		self.display.blit(pygame.transform.scale(self.view.get_image2D(None), size), pos)
 
+class Tiles:
+	def __init__(self):
+		self.tiles = {}
+	
+	def add(self, name, tile):
+		self.tiles[name.replace("\\"," ").replace("/"," ")] = tile
+		
+	def get(self, name):
+		return self.tiles[name]
+		
+	def list(self):
+		return [key for key in self.tiles]
+
+	def create_from_dir(self, path, method):
+		game_cells = glob.glob(os.path.join(path, "*.png"))
+		for fn in game_cells:
+			fn = fn.replace(".png","")
+			t = method(fn)
+			self.add(fn, t)
+
+class Font:
+	def __init__(self, directory):
+		self.font_tiles = Tiles()
+		self.font_tiles.create_from_dir(directory, CharacterCellLens)
+		self.namespace = directory
+	
+	def get_tile(self, k):
+		return self.font_tiles.get(k)
+
+class Label:
+	def __init__(self, text, font):
+		self.text = text
+		self.len = len(text)
+		self.font = font
+	
+	def place(self, view, pos):
+		x,y = pos
+		for c in self.text:
+			view.erase_at((x, y))
+			view.set_at((x, y), self.font.get_tile(self.font.namespace+" "+str(c)))
+			x += 1
+
+class Score:
+	def __init__(self, name, value, digits, font):
+		self.value = value
+		self.name = name
+		self.font = font
+		self.digits = digits
+
+	def place(self, view, pos):
+		x,y = pos
+		val = str(self.value).zfill(self.digits)
+		for c in val:
+			view.erase_at((x, y))
+			view.set_at((x, y), self.font.get_tile(self.font.namespace+" "+str(c)))
+			x += 1
 
 # Custom stuff
 
-def space_junk():  #  Messing about space-themed salvage
+def saucer_attack():  #  Messing about space-themed salvage
+	size = width,height = 800,800  # Pygame
+	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
+	r.set_view(View2DLens())
+	play_size = 20
+	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
+	
+	# Set up tiles
+	tiles = Tiles()
+	tiles.create_from_dir("saucer_attack", CharacterCellLens)
+
+	enemy = tiles.get("saucer_attack enemy_a")
+	enemy_missile = tiles.get("saucer_attack enemy_missile")
+	land = tiles.get("saucer_attack land")
+	missile = tiles.get("saucer_attack missile")
+	pilot = tiles.get("saucer_attack pilot")
+	ship = tiles.get("saucer_attack ship")
+	ship_pos = play_size>>1, 1  # Player starts in the middle
+
+	font = Font("font")
+	lbl_game_name = Label("saucer_attack", font)
+	lbl_game_over = Label("game_over", font)
+	lbl_start = Label("start", font)
+	lbl_score = Label("score_", font)
+	lbl_pilots = Label("pilots_", font)
+	score_pilots = Score("pilots", 3, 1, font)
+
+	score_points = Score("score", 0, 10, font)
+
+	r.view.fill_area(land, [0, 0], [play_size, 1] )
+
+	r.view.fill_area(enemy, [0, play_size-3], [play_size, 1] )
+	r.view.fill_area(enemy_missile, [0, play_size-4], [play_size, 1] )
+	r.view.fill_area(missile, [0, 2], [play_size, 1] )
+
+	keepGoing = True
+	iterations = 0
+	pause = False
+	while keepGoing:
+		if pause == False:
+			# Draw the screen
+			r.view.draw_label(lbl_pilots, [0, play_size-1])
+			r.view.draw_label(score_pilots, [len(lbl_pilots.text)+1, play_size-1])
+			for x in xrange(0, score_pilots.value):
+				r.view.erase_at((len(lbl_pilots.text)+3+x, play_size-1))
+				r.view.set_at((len(lbl_pilots.text)+3+x, play_size-1), pilot)
+			r.view.draw_label(lbl_score, [0, play_size-2])
+			r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-2])
+
+			# Scan the screen and process any updates based on what we find.
+#			if iterations%2 == 0:  # Ticks
+
+			if iterations%100 == 0:
+				remove_list = []
+				new_list = []
+
+				for pos in r.view.get_cells():  # This should be an iterator
+					x,y = pos
+					cell = r.view.get_at(pos)
+					if enemy_missile in cell: # Move down the screen
+						if y > 1:
+							remove_list.append((pos, enemy_missile))
+							new_list.append(((x,y-1), enemy_missile))
+						else:
+							remove_list.append((pos, enemy_missile))
+							new_list.append(((x,y), enemy))
+					if missile in cell:
+						# Move up the screen
+						if y < play_size-3:
+							remove_list.append((pos, missile))
+							new_list.append(((x,y+1), missile))
+						else:
+							remove_list.append((pos, missile))
+				# Process play zone updates
+				for (pos,thing) in remove_list:
+					r.view.remove(pos, thing)
+				for (pos,thing) in new_list:
+					r.view.set_at(pos, thing)
+			
+			iterations += 1
+			
+			r.draw([0,0],[width, height])
+			
+			
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				keepGoing = False
+			elif event.type == pygame.MOUSEBUTTONUP:
+				if event.button == 1: # 1 == Left
+					pause = not pause
+					(px,py) = event.pos
+
+saucer_attack()
+
+def random_tiles():  #  Messing about space-themed salvage
 	size = width,height = 800,800  # Pygame
 	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
 	r.set_view(View2DLens())
@@ -154,16 +350,23 @@ def space_junk():  #  Messing about space-themed salvage
 	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
 	
 	# Set up tiles
+	tiles = Tiles()
 	font_cells = "0123456789abcdefghijklmnopqrstuvwxyz"
-	tiles = []
+
 	for c in font_cells:
 		t = CharacterCellLens("font/"+str(c))
-		tiles.append(t)
+		tiles.add(str(c),t)
+
+	game_cells = glob.glob(os.path.join("space_junk", "*.png"))
+	for fn in game_cells:
+		name = fn.replace(".png","")
+		t = CharacterCellLens(name)
+		tiles.add(name, t)
 
 	for col in xrange(0, play_size):
 		for row in xrange(0, play_size):
 			if random.random() > 0.7:
-				r.view.set_at((row, col), tiles[random.randint(0, len(tiles)-1)])
+				r.view.set_at((row, col), tiles.get(random.choice(tiles.list())))
 
 	keepGoing = True
 	iterations = 0
@@ -184,9 +387,6 @@ def space_junk():  #  Messing about space-themed salvage
 				if event.button == 1: # 1 == Left
 					pause = not pause
 					(px,py) = event.pos
-
-space_junk()
-	
 	
 def game_of_life(): # Conway game of Life
 	size = width,height = 800,800  # Pygame
@@ -206,7 +406,7 @@ def game_of_life(): # Conway game of Life
 
 	keepGoing = True
 	iterations = 0
-	pause = True
+	pause = False
 	while keepGoing:
 		if pause == False:
 			alive.tick()
