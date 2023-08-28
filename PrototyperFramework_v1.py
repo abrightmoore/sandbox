@@ -69,6 +69,7 @@ class View2DLens:
 	'''
 	
 	def __init__(self):
+		self.debug = 1
 		self.width = 50
 		self.height = 25
 		self.layer = 1
@@ -165,7 +166,7 @@ class View2DLens:
 					if ob is not None:
 						ob.draw2D(surface, (px, py), (self.cell_width, self.cell_height))
 
-				if len(self.things[pos]) > 1:  # Are there more than two items in this location?
+				if self.debug > 0 and len(self.things[pos]) > 1:  # Are there more than two items in this location?
 					pygame.draw.rect(surface, (255,0,0,255), [px, py, self.cell_width, self.cell_height], 1)
 				
 		self.surface_cache = surface
@@ -243,6 +244,9 @@ class Score:
 			view.erase_at((x, y))
 			view.set_at((x, y), self.font.get_tile(self.font.namespace+" "+str(c)))
 			x += 1
+			
+	def add(self, delta):
+		self.value += delta
 
 # Custom stuff
 
@@ -257,13 +261,18 @@ def saucer_attack():  #  Messing about space-themed salvage
 	tiles = Tiles()
 	tiles.create_from_dir("saucer_attack", CharacterCellLens)
 
-	enemy = tiles.get("saucer_attack enemy_a")
+	enemy_left = tiles.get("saucer_attack enemy_left")
+	enemy_right = tiles.get("saucer_attack enemy_right")
+	enemy_lander = tiles.get("saucer_attack enemy_lander")
 	enemy_missile = tiles.get("saucer_attack enemy_missile")
 	land = tiles.get("saucer_attack land")
 	missile = tiles.get("saucer_attack missile")
 	pilot = tiles.get("saucer_attack pilot")
 	ship = tiles.get("saucer_attack ship")
 	ship_pos = play_size>>1, 1  # Player starts in the middle
+	explode1 = tiles.get("saucer_attack explode1")
+	explode2 = tiles.get("saucer_attack explode2")
+	explode3 = tiles.get("saucer_attack explode3")
 
 	font = Font("font")
 	lbl_game_name = Label("saucer_attack", font)
@@ -277,13 +286,19 @@ def saucer_attack():  #  Messing about space-themed salvage
 
 	r.view.fill_area(land, [0, 0], [play_size, 1] )
 
-	r.view.fill_area(enemy, [0, play_size-3], [play_size, 1] )
+	r.view.fill_area(enemy_left, [0, play_size-3], [play_size>>1, 1] )
+	r.view.fill_area(enemy_right, [play_size>>1, play_size-3], [play_size>>1, 1] )
 	r.view.fill_area(enemy_missile, [0, play_size-4], [play_size, 1] )
 	r.view.fill_area(missile, [0, 2], [play_size, 1] )
 
+	r.view.set_at(ship_pos, ship)
+
 	keepGoing = True
 	iterations = 0
+	cooldown = 100
+	last_shot = 0
 	pause = False
+	tick_rate = 40   # TODO reduce this as levels go up to increase game speed
 	while keepGoing:
 		if pause == False:
 			# Draw the screen
@@ -296,23 +311,72 @@ def saucer_attack():  #  Messing about space-themed salvage
 			r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-2])
 
 			# Scan the screen and process any updates based on what we find.
-#			if iterations%2 == 0:  # Ticks
-
-			if iterations%100 == 0:
+			if iterations%tick_rate == 0:  # Delay - change this to be timing based TODO
 				remove_list = []
 				new_list = []
 
 				for pos in r.view.get_cells():  # This should be an iterator
 					x,y = pos
 					cell = r.view.get_at(pos)
-					if enemy_missile in cell: # Move down the screen
-						if y > 1:
-							remove_list.append((pos, enemy_missile))
-							new_list.append(((x,y-1), enemy_missile))
+					
+					missile_exploded = False
+					
+					if explode3 in cell:
+						remove_list.append((pos, explode3))
+					if explode2 in cell:
+						remove_list.append((pos, explode2))
+						new_list.append((pos, explode3))
+					if explode1 in cell:
+						remove_list.append((pos, explode1))
+						new_list.append((pos, explode2))
+						
+					if enemy_left in cell: # Move randomly left and right, move down when at the edges
+						# Check if hit by a player missile
+						if missile in cell:
+							remove_list.append((pos, enemy_left))
+							score_points.add(100)
+							remove_list.append((pos, missile))
+							new_list.append((pos, explode1))
+							missile_exploded = True
 						else:
+							if y > 2: # Move left
+								remove_list.append((pos, enemy_left))
+								if 0 < x:
+									new_list.append(((x-1,y), enemy_left))
+								elif x == 0:
+									new_list.append(((x,y-1), enemy_right))  # Move down one row
+
+					if enemy_right in cell: # Move randomly left and right, move down when at the edges
+						# Check if hit by a player missile						
+						if missile in cell:
+							remove_list.append((pos, enemy_right))
+							score_points.add(100)
+							remove_list.append((pos, missile))
+							new_list.append((pos, explode1))
+							missile_exploded = True
+						else:
+							if y > 2: # Move right
+								remove_list.append((pos, enemy_right))
+								if x < play_size-1:
+									new_list.append(((x+1,y), enemy_right))
+								elif x == play_size-1:
+									new_list.append(((x,y-1), enemy_left))  # Move down one row
+					
+					if enemy_missile in cell: # Move down the screen
+						if missile in cell:
 							remove_list.append((pos, enemy_missile))
-							new_list.append(((x,y), enemy))
-					if missile in cell:
+							remove_list.append((pos, missile))
+							score_points.add(20)
+							new_list.append((pos, explode1))
+							missile_exploded = True
+						else:
+							if y > 1:
+								remove_list.append((pos, enemy_missile))
+								new_list.append(((x,y-1), enemy_missile))
+							else:
+								remove_list.append((pos, enemy_missile))
+								new_list.append(((x,y), enemy_lander))  # Landed on the ground
+					if missile in cell and missile_exploded == False:
 						# Move up the screen
 						if y < play_size-3:
 							remove_list.append((pos, missile))
@@ -337,8 +401,27 @@ def saucer_attack():  #  Messing about space-themed salvage
 				keepGoing = False
 			elif event.type == pygame.MOUSEBUTTONUP:
 				if event.button == 1: # 1 == Left
-					pause = not pause
-					(px,py) = event.pos
+					if iterations - last_shot > cooldown:
+						x, y = ship_pos
+						if y < play_size-3:
+							r.view.set_at((x,y+1), missile)
+							r.view.set_at((x,y), explode1)
+							last_shot = iterations
+
+					
+			elif event.type == pygame.MOUSEMOTION:
+				(px,py) = event.pos
+				cell_x = int(px/r.view.cell_width)
+				# cell_y = int(py/r.view.cell_height)
+				x,y = ship_pos
+				if cell_x < x and 0 < x:  # Move left
+					r.view.remove(ship_pos, ship)
+					ship_pos = x-1, y
+					r.view.set_at(ship_pos, ship)
+				if cell_x > x and x < play_size-1:  # Move right
+					r.view.remove(ship_pos, ship)
+					ship_pos = x+1, y
+					r.view.set_at(ship_pos, ship)
 
 saucer_attack()
 
