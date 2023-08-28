@@ -69,7 +69,7 @@ class View2DLens:
 	'''
 	
 	def __init__(self):
-		self.debug = 1
+		self.debug = 0
 		self.width = 50
 		self.height = 25
 		self.layer = 1
@@ -127,7 +127,7 @@ class View2DLens:
 			for row in xrange(0, self.width):
 				self.set_at((row,col), thing)
 	
-	def fill_area(self, thing, pos, size):
+	def fill_area(self, thing, pos, size, chance):
 		self.invalidate()  # Invalidate cache
 		
 		x,y = pos
@@ -135,7 +135,8 @@ class View2DLens:
 		
 		for col in xrange(y, y+height):
 			for row in xrange(x, x+width):
-				self.set_at((row,col), thing)
+				if random.random() <= chance:
+					self.set_at((row,col), thing)
 
 	def draw_label(self, label, pos):
 		self.invalidate()
@@ -261,6 +262,10 @@ def saucer_attack():  #  Messing about space-themed salvage
 	tiles = Tiles()
 	tiles.create_from_dir("saucer_attack", CharacterCellLens)
 
+	enemy_base1 = tiles.get("saucer_attack enemy_base")
+	enemy_base2 = tiles.get("saucer_attack enemy_base1")
+	enemy_base3 = tiles.get("saucer_attack enemy_base2")
+
 	enemy_left = tiles.get("saucer_attack enemy_left")
 	enemy_right = tiles.get("saucer_attack enemy_right")
 	enemy_lander = tiles.get("saucer_attack enemy_lander")
@@ -284,12 +289,12 @@ def saucer_attack():  #  Messing about space-themed salvage
 
 	score_points = Score("score", 0, 10, font)
 
-	r.view.fill_area(land, [0, 0], [play_size, 1] )
+	r.view.fill_area(land, [0, 0], [play_size, 1], 1.0 )
 
-	r.view.fill_area(enemy_left, [0, play_size-3], [play_size>>1, 1] )
-	r.view.fill_area(enemy_right, [play_size>>1, play_size-3], [play_size>>1, 1] )
-	r.view.fill_area(enemy_missile, [0, play_size-4], [play_size, 1] )
-	r.view.fill_area(missile, [0, 2], [play_size, 1] )
+	r.view.fill_area(enemy_left, [0, play_size-3], [play_size>>1, 1], 0.5 )
+	r.view.fill_area(enemy_right, [play_size>>1, play_size-3], [play_size>>1, 1], 0.5 )
+	r.view.fill_area(enemy_missile, [0, play_size-4], [play_size, 1], 1.0 )
+	r.view.fill_area(missile, [0, 2], [play_size, 1], 1.0 )
 
 	r.view.set_at(ship_pos, ship)
 
@@ -298,14 +303,18 @@ def saucer_attack():  #  Messing about space-themed salvage
 	cooldown = 100
 	last_shot = 0
 	pause = False
+	game_over_flag = False
 	tick_rate = 40   # TODO reduce this as levels go up to increase game speed
+	tick_rate_min = 10
+	level = 1
+	level_handled = 0
 	while keepGoing:
 		if pause == False:
 			# Draw the screen
 			r.view.draw_label(lbl_pilots, [0, play_size-1])
 			r.view.draw_label(score_pilots, [len(lbl_pilots.text)+1, play_size-1])
 			for x in xrange(0, score_pilots.value):
-				r.view.erase_at((len(lbl_pilots.text)+3+x, play_size-1))
+				r.view.erase_at((len(lbl_pilots.text)+3+x, play_size-1))			
 				r.view.set_at((len(lbl_pilots.text)+3+x, play_size-1), pilot)
 			r.view.draw_label(lbl_score, [0, play_size-2])
 			r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-2])
@@ -320,6 +329,7 @@ def saucer_attack():  #  Messing about space-themed salvage
 					cell = r.view.get_at(pos)
 					
 					missile_exploded = False
+					enemy_destroyed = False
 					
 					if explode3 in cell:
 						remove_list.append((pos, explode3))
@@ -329,7 +339,93 @@ def saucer_attack():  #  Messing about space-themed salvage
 					if explode1 in cell:
 						remove_list.append((pos, explode1))
 						new_list.append((pos, explode2))
-						
+
+					if enemy_base3 in cell:  # Move randomly left and right
+						if missile in cell:
+							remove_list.append((pos, enemy_base3))
+							score_points.add(2500)
+							remove_list.append((pos, missile))
+							new_list.append((pos, explode1))
+							new_list.append(((x+1,y), explode2))
+							new_list.append(((x-1,y), explode2))
+							new_list.append(((x,y-1), explode3))
+							missile_exploded = True
+							enemy_destroyed = True
+						else:
+							if random.random() > 0.95:  # Fire megalaser
+								new_list.append(((x,y), enemy_missile))
+								new_list.append(((x,y-1), enemy_missile))
+								new_list.append(((x,y-2), enemy_missile))
+								new_list.append(((x,y-3), enemy_missile))
+								
+							if x == 0:
+								remove_list.append((pos, enemy_base3))
+								new_list.append(((x+1,y), enemy_base3))
+							elif x == play_size-1:
+								remove_list.append((pos, enemy_base3))
+								new_list.append(((x-1,y), enemy_base3))
+							else:
+								remove_list.append((pos, enemy_base3))
+								new_list.append(((x+random.randint(-1,1),y), enemy_base3))
+
+					if enemy_base2 in cell:  # Move randomly left and right
+						if missile in cell:
+							remove_list.append((pos, enemy_base2))
+							new_list.append((pos, enemy_base3))
+							score_points.add(2000)
+							remove_list.append((pos, missile))
+							new_list.append((pos, explode1))
+							new_list.append(((x+1,y), explode2))
+							new_list.append(((x-1,y), explode2))
+							new_list.append(((x,y-1), explode3))
+							missile_exploded = True
+							enemy_destroyed = True
+						else:
+							if random.random() > 0.95:  # Fire megalaser
+								new_list.append(((x,y), enemy_missile))
+								new_list.append(((x,y-1), enemy_missile))
+								new_list.append(((x,y-2), enemy_missile))
+								new_list.append(((x,y-3), enemy_missile))
+								
+							if x == 0:
+								remove_list.append((pos, enemy_base2))
+								new_list.append(((x+1,y), enemy_base2))
+							elif x == play_size-1:
+								remove_list.append((pos, enemy_base2))
+								new_list.append(((x-1,y), enemy_base2))
+							else:
+								remove_list.append((pos, enemy_base2))
+								new_list.append(((x+random.randint(-1,1),y), enemy_base2))
+
+					if enemy_base1 in cell:  # Move randomly left and right
+						if missile in cell:
+							remove_list.append((pos, enemy_base1))
+							new_list.append((pos, enemy_base2))
+							score_points.add(500)
+							remove_list.append((pos, missile))
+							new_list.append((pos, explode1))
+							new_list.append(((x+1,y), explode2))
+							new_list.append(((x-1,y), explode2))
+							new_list.append(((x,y-1), explode3))
+							missile_exploded = True
+							enemy_destroyed = True
+						else:
+							if random.random() > 0.95:  # Fire megalaser
+								new_list.append(((x,y), enemy_missile))
+								new_list.append(((x,y-1), enemy_missile))
+								new_list.append(((x,y-2), enemy_missile))
+								new_list.append(((x,y-3), enemy_missile))
+								
+							if x == 0:
+								remove_list.append((pos, enemy_base1))
+								new_list.append(((x+1,y), enemy_base1))
+							elif x == play_size-1:
+								remove_list.append((pos, enemy_base1))
+								new_list.append(((x-1,y), enemy_base1))
+							else:
+								remove_list.append((pos, enemy_base1))
+								new_list.append(((x+random.randint(-1,1),y), enemy_base1))
+
 					if enemy_left in cell: # Move randomly left and right, move down when at the edges
 						# Check if hit by a player missile
 						if missile in cell:
@@ -338,14 +434,29 @@ def saucer_attack():  #  Messing about space-themed salvage
 							remove_list.append((pos, missile))
 							new_list.append((pos, explode1))
 							missile_exploded = True
+							enemy_destroyed = True
 						else:
-							if y > 2: # Move left
+							if y > 1: # Move left
+								if random.random() < 0.01:
+									new_list.append((pos, enemy_missile))
+
 								remove_list.append((pos, enemy_left))
 								if 0 < x:
 									new_list.append(((x-1,y), enemy_left))
 								elif x == 0:
 									new_list.append(((x,y-1), enemy_right))  # Move down one row
-
+							elif y == 1:  # Chance of landing
+								if 0 < x:
+									if random.random() < 0.9 or enemy_lander in cell:
+										remove_list.append((pos, enemy_left))
+										new_list.append(((x-1,y), enemy_left))
+									else:
+										remove_list.append((pos, enemy_left))
+										new_list.append(((x,y), enemy_lander))
+								else:
+									remove_list.append((pos, enemy_left))
+									new_list.append(((x+1,y), enemy_right))
+									
 					if enemy_right in cell: # Move randomly left and right, move down when at the edges
 						# Check if hit by a player missile						
 						if missile in cell:
@@ -354,28 +465,56 @@ def saucer_attack():  #  Messing about space-themed salvage
 							remove_list.append((pos, missile))
 							new_list.append((pos, explode1))
 							missile_exploded = True
+							enemy_destroyed = True
 						else:
-							if y > 2: # Move right
+							if y > 1: # Move right
+								if random.random() < 0.01:
+									new_list.append((pos, enemy_missile))
 								remove_list.append((pos, enemy_right))
 								if x < play_size-1:
 									new_list.append(((x+1,y), enemy_right))
 								elif x == play_size-1:
 									new_list.append(((x,y-1), enemy_left))  # Move down one row
+							elif y == 1:  # Chance of landing
+								if x < play_size-1:
+									if random.random() < 0.9 or enemy_lander in cell:
+										remove_list.append((pos, enemy_right))
+										new_list.append(((x+1,y), enemy_right))
+									else:
+										remove_list.append((pos, enemy_right))
+										new_list.append((pos, enemy_lander))
+								else:
+									remove_list.append((pos, enemy_right))
+									new_list.append(((x-1,y), enemy_left))
 					
 					if enemy_missile in cell: # Move down the screen
-						if missile in cell:
+						if missile in cell or missile in r.view.get_at((x,y-1)):
 							remove_list.append((pos, enemy_missile))
 							remove_list.append((pos, missile))
 							score_points.add(20)
 							new_list.append((pos, explode1))
 							missile_exploded = True
 						else:
+							if ship in cell: # Boom!
+								remove_list.append((pos, enemy_missile))
+								new_list.append((pos, explode1))
+								r.view.erase_at((len(lbl_pilots.text)+score_pilots.value+3-1, play_size-1))
+								new_list.append(((len(lbl_pilots.text)+score_pilots.value+3-1, play_size-1), explode1))
+								if score_pilots.value < 1:
+									game_over_flag = True
+								else:
+									score_pilots.add(-1)
+								for px in xrange(0, play_size):
+									r.view.erase_at((px, 1))
+									new_list.append(((px, 1), random.choice([explode1, explode2, explode3])))
+									
 							if y > 1:
 								remove_list.append((pos, enemy_missile))
 								new_list.append(((x,y-1), enemy_missile))
 							else:
 								remove_list.append((pos, enemy_missile))
-								new_list.append(((x,y), enemy_lander))  # Landed on the ground
+								new_list.append((pos, explode1))
+
 					if missile in cell and missile_exploded == False:
 						# Move up the screen
 						if y < play_size-3:
@@ -383,6 +522,14 @@ def saucer_attack():  #  Messing about space-themed salvage
 							new_list.append(((x,y+1), missile))
 						else:
 							remove_list.append((pos, missile))
+					if missile in cell and enemy_destroyed == True:
+						tick_rate -= 1
+						if tick_rate < tick_rate_min:
+							tick_rate = tick_rate_min
+						if random.random() > 0.5:
+							r.view.set_at((0, play_size-3), enemy_right)
+						else:
+							r.view.set_at((play_size-1, play_size-3), enemy_left)
 				# Process play zone updates
 				for (pos,thing) in remove_list:
 					r.view.remove(pos, thing)
@@ -390,6 +537,9 @@ def saucer_attack():  #  Messing about space-themed salvage
 					r.view.set_at(pos, thing)
 			
 			iterations += 1
+			
+			if game_over_flag:
+				r.view.draw_label(lbl_game_over, [(play_size>>1)-4, play_size>>1])
 			
 			r.draw([0,0],[width, height])
 			
@@ -401,27 +551,39 @@ def saucer_attack():  #  Messing about space-themed salvage
 				keepGoing = False
 			elif event.type == pygame.MOUSEBUTTONUP:
 				if event.button == 1: # 1 == Left
-					if iterations - last_shot > cooldown:
-						x, y = ship_pos
-						if y < play_size-3:
-							r.view.set_at((x,y+1), missile)
-							r.view.set_at((x,y), explode1)
-							last_shot = iterations
+					if not game_over_flag:
+						if iterations - last_shot > tick_rate<<1:
+							x, y = ship_pos
+							if y < play_size-3:
+								r.view.set_at((x,y), missile)
+								r.view.set_at((x,y+1), explode1)
+								last_shot = iterations
+								score_points.value -= 1
+								if score_points.value < 0:
+									score_points.value = 0
 
-					
 			elif event.type == pygame.MOUSEMOTION:
-				(px,py) = event.pos
-				cell_x = int(px/r.view.cell_width)
-				# cell_y = int(py/r.view.cell_height)
-				x,y = ship_pos
-				if cell_x < x and 0 < x:  # Move left
-					r.view.remove(ship_pos, ship)
-					ship_pos = x-1, y
-					r.view.set_at(ship_pos, ship)
-				if cell_x > x and x < play_size-1:  # Move right
-					r.view.remove(ship_pos, ship)
-					ship_pos = x+1, y
-					r.view.set_at(ship_pos, ship)
+				if not game_over_flag:
+					(px,py) = event.pos
+					cell_x = int(px/r.view.cell_width)
+					# cell_y = int(py/r.view.cell_height)
+					x,y = ship_pos
+					if cell_x < x and 0 < x:  # Move left
+						if r.view.get_at((x-1, y)) == []:
+							r.view.remove(ship_pos, ship)
+							ship_pos = x-1, y
+							r.view.set_at(ship_pos, ship)
+					if cell_x > x and x < play_size-1:  # Move right
+						if r.view.get_at((x+1, y)) == []:
+							r.view.remove(ship_pos, ship)
+							ship_pos = x+1, y
+							r.view.set_at(ship_pos, ship)
+		
+		level = int(score_points.value / 10000)
+		if level_handled < level:
+			r.view.set_at((play_size-1, play_size-random.randint(4,play_size>>1)), enemy_base1)
+			score_pilots.add(1)
+			level_handled = level
 
 saucer_attack()
 
