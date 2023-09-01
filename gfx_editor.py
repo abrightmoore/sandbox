@@ -1,6 +1,6 @@
 #  @TheWorldFoundry
 import time
-
+import random
 import pygame
 pygame.init()
 
@@ -46,12 +46,13 @@ class Clickable:
 
 #  Globals
 working_file = "_curimage.png"
+output_folder = "images/"
 img = pygame.image.load(working_file)  # pygame.Surface(img_sz, pygame.SRCALPHA)
 img_sz = [img.get_width(),img.get_height()]
 img_copy = pygame.Surface(img_sz, pygame.SRCALPHA)
 
 def save():
-	pygame.image.save(img, "image_"+str(time.time()).replace(".","_")+".png")
+	pygame.image.save(img, output_folder+"image_"+str(time.time()).replace(".","_")+".png")
 	pygame.image.save(img, working_file)
 
 def clear():
@@ -62,6 +63,52 @@ def store():
 	
 def restore():
 	img.blit(img_copy, [0,0])
+
+def rotate():
+	global img
+	img = pygame.transform.rotate(img, 90)
+
+def up():
+	temp = pygame.Surface((img.get_width(),img.get_height()),pygame.SRCALPHA)
+	temp.blit(img,[0,0])
+	img.blit(temp,[0,0],[0,1,img.get_width(),img.get_height()-1])
+	img.blit(temp,[0,img.get_height()-1],[0,0,img.get_width(),1])
+
+def down():
+	temp = pygame.Surface((img.get_width(),img.get_height()),pygame.SRCALPHA)
+	temp.blit(img,[0,0])
+	img.blit(temp,[0,1],[0,0,img.get_width(),img.get_height()-1])
+	img.blit(temp,[0,0],[0,img.get_height()-1,img.get_width(),1])
+
+def left():
+	temp = pygame.Surface((img.get_width(),img.get_height()),pygame.SRCALPHA)
+	temp.blit(img,[0,0])
+	img.blit(temp,[0,0],[1,0,img.get_width()-1,img.get_height()])
+	img.blit(temp,[img.get_width()-1,0],[0,0,1,img.get_height()])
+
+def right():
+	temp = pygame.Surface((img.get_width(),img.get_height()),pygame.SRCALPHA)
+	temp.blit(img,[0,0])
+	img.blit(temp,[1,0],[0,0,img.get_width()-1,img.get_height()])
+	img.blit(temp,[0,0],[img.get_width()-1,0,1,img.get_height()])
+
+def mirror_vertical():
+	temp = pygame.Surface((img.get_width(),img.get_height()),pygame.SRCALPHA)
+	temp.blit(img,[0,0])
+	temp = pygame.transform.flip(temp, False, True)
+	img.blit(temp,[0, img.get_height()>>1], [0, img.get_height()>>1, img.get_width(), img.get_height()>>1])
+
+def mirror_horizontal():
+	temp = pygame.Surface((img.get_width(),img.get_height()),pygame.SRCALPHA)
+	temp.blit(img,[0,0])
+	temp = pygame.transform.flip(temp, True, False)
+	img.blit(temp,[img.get_width()>>1, 0], [img.get_width()>>1, 0, img.get_width()>>1, img.get_height()])
+
+def picker():
+	pass
+
+def dice():
+	pass
 
 def editor():
 	size = [880,800]
@@ -117,9 +164,32 @@ def editor():
 	clear_icon = pygame.image.load("clear.png")
 	store_icon = pygame.image.load("store.png")
 	restore_icon = pygame.image.load("restore.png")
+	rotate_icon = pygame.image.load("rotate.png")
+	up_icon = pygame.image.load("up.png")
+	down_icon = pygame.image.load("down.png")
+	left_icon = pygame.image.load("left.png")
+	right_icon = pygame.image.load("right.png")
+	mirrorh_icon = pygame.image.load("mirrorh.png")
+	mirrorv_icon = pygame.image.load("mirrorv.png")
+	picker_icon = pygame.image.load("picker.png")
+	dice_icon = pygame.image.load("dice.png")
+	
 	
 	controls_clickables = {}
-	controls = [ ("Save", "lime", save, save_icon), ("Clear", "yellow", clear, clear_icon), ("Store","orange", store, store_icon), ("Restore","red", restore, restore_icon) ]
+	controls = [ ("Save", "lime", save, save_icon),
+				("Clear", "yellow", clear, clear_icon),
+				("Store","orange", store, store_icon),
+				("Restore","red", restore, restore_icon),
+				("Rotate","purple", rotate, rotate_icon),
+				("Up","purple", up, up_icon),
+				("Down","purple", down, down_icon),
+				("Left","purple", left, left_icon),
+				("Right","purple", right, right_icon),
+				("Mirror Horizontal","purple", mirror_horizontal, mirrorh_icon),
+				("Mirror Vertical","purple", mirror_vertical, mirrorv_icon),
+				("Picker","purple", picker, picker_icon),
+				("Dice","purple", dice, dice_icon),
+			]
 	d = 32
 	y = d*3
 	for (c, colour, method, icon) in controls:
@@ -154,6 +224,7 @@ def editor():
 	# Gameloop
 	keepGoing = True
 	iterations = 0
+	picker_active = False
 	while keepGoing:
 		iterations += 1
 		surface.fill(colours["black"])
@@ -189,9 +260,24 @@ def editor():
 							clickables[clickable].half_size()
 							clickables[clickable].perform()
 							if clickable == "Clear":
+								picker_active = False
 								for c in pixel_clickables:
-									pixel_clickables[c].colour = colours["black"]
-							if clickable == "Restore":
+									if selected is not None:
+										pixel_clickables[c].colour = selected.colour
+									else:
+										pixel_clickables[c].colour = colours["black"]
+									for p in pixel_clickables:
+										img.set_at(p, pixel_clickables[p].colour)
+							if clickable == "Dice":
+								picker_active = False
+								for c in pixel_clickables:
+									pixel_clickables[c].colour = colour_clickables[random.choice(colour_clickables.keys())].colour
+									for p in pixel_clickables:
+										img.set_at(p, pixel_clickables[p].colour)
+							if clickable == "Picker":
+								picker_active = True
+							if clickable in ["Restore", "Rotate", "Up", "Down", "Left", "Right", "Mirror Horizontal", "Mirror Vertical"]:
+								picker_active = False
 								for p in pixel_clickables:
 									pixel_clickables[p].colour = img.get_at(p)
 					
@@ -199,6 +285,7 @@ def editor():
 					for clickable in clickables:
 						# print clickable
 						if clickables[clickable].is_clicked(event.pos):
+							picker_active = False
 							if selected is not None:
 								selected.colour_border = colours["black"]
 							selected = clickables[clickable]
@@ -208,7 +295,16 @@ def editor():
 					clickables = pixel_clickables
 					for clickable in clickables:
 						if clickables[clickable].is_clicked(event.pos):
-							if selected is not None:
+							if picker_active:  # Change nothing, we're selecting
+								for c in colour_clickables:
+									if (clickables[clickable].colour[0],clickables[clickable].colour[1],clickables[clickable].colour[2]) == (colour_clickables[c].colour[0],colour_clickables[c].colour[1],colour_clickables[c].colour[2]):  # Match!
+										if selected is not None:
+											selected.colour_border = colours["black"]
+										selected = colour_clickables[c]
+										selected.colour_border = colours["white"]
+										selected.half_size()
+								picker_active = False
+							elif selected is not None:
 								clickables[clickable].colour = selected.colour
 								img.set_at(clickable, selected.colour)
 								clickables[clickable].half_size()
