@@ -5,11 +5,13 @@ pygame.init()
 class Clickable:
 	''' An onscreen bitmap dimensioned element that can be clicked
 	'''
-	def __init__(self, pos, size, colour):
+	def __init__(self, pos, size, colour, method, icon):
 		self.pos = pos
 		self.size = size
 		self.colour = colour
 		self.colour_border = [0x00, 0x00, 0x00, 0xff]
+		self.method = method
+		self.icon = icon
 		
 	def is_clicked(self, click_pos):
 		# is the click_pos within the clickable?
@@ -19,8 +21,31 @@ class Clickable:
 		return result
 	
 	def draw(self, surface, origin):
-		pygame.draw.rect(surface, self.colour, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]])
-		pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]],1)
+		if self.icon == None:  # No icon? draw the colour
+			pygame.draw.rect(surface, self.colour, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]])
+			pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]],1)
+		else:
+			surface.blit(pygame.transform.scale(self.icon, self.size), [origin[0]+self.pos[0], origin[1]+self.pos[1]])
+
+	def perform(self):
+		self.method()
+
+#  Globals
+img_sz = [8,8]
+img = pygame.Surface(img_sz, pygame.SRCALPHA)
+img_copy = pygame.Surface(img_sz, pygame.SRCALPHA)
+
+def save():
+	pygame.image.save(img, "image.png")
+
+def clear():
+	img.fill([0x00, 0x00, 0x00, 0xff])
+	
+def store():
+	img_copy.blit(img, [0,0])
+	
+def restore():
+	img.blit(img_copy, [0,0])
 
 def editor():
 	size = [880,800]
@@ -48,21 +73,37 @@ def editor():
 		"blue-grey"      : [0x70, 0x92, 0xbe, 0xff],
 		"lavender"       : [0xc8, 0xbf, 0xe7, 0xff]
 	}
+	save_icon = pygame.image.load("save.png")
+	clear_icon = pygame.image.load("clear.png")
+	store_icon = pygame.image.load("store.png")
+	restore_icon = pygame.image.load("restore.png")
+	
+	controls_clickables = {}
+	controls = [ ("Save", "lime", save, save_icon), ("Clear", "yellow", clear, clear_icon), ("Store","orange", store, store_icon), ("Restore","red", restore, restore_icon) ]
+	d = 32
+	y = d*3
+	for (c, colour, method, icon) in controls:
+		controls_clickables[c] = Clickable([size[1]+4, y], [d, d], colours[colour], method, icon)
+		y += d+8
+		if c == "Store":
+			y += 40
+	
 	colour_clickables = {}
 	h = int(size[1]/len(colours))
 	y = 0
 	for colour in colours:
-		colour_clickables[(size[0]-h, y)] = Clickable([size[0]-h,y],[h,h],colours[colour])
+		colour_clickables[colour] = Clickable([size[0]-h,y],[h,h],colours[colour], None, None)
 		y += h
 	#  print colour_clickables
 	
 	# Set up a pixel grid based on the image size
-	character_size = [16,16]
+	character_size = img_sz
 	pixel_clickables = {}
 	h = int(size[1]/character_size[0])
 	for y in xrange(0, character_size[1]):
 		for x in xrange(0, character_size[0]):
-			pixel_clickables[(x*h, y*h)] = Clickable([x*h,y*h],[h,h],colours["light yellow"])
+			pixel_clickables[(x, y)] = Clickable([x*h,y*h],[h,h],colours["light yellow"], None, None)
+	img.fill(colours["light yellow"])
 	
 	surface = pygame.display.set_mode(size, pygame.SRCALPHA)
 	
@@ -74,9 +115,16 @@ def editor():
 	while keepGoing:
 		iterations += 1
 		
-		for clickables in [colour_clickables, pixel_clickables]:
+		for clickables in [colour_clickables, pixel_clickables, controls_clickables]:
 			for clickable in clickables:
 				clickables[clickable].draw(surface, [0,0])
+		
+		surface.blit(img, [size[1]+4, 0])
+		surface.blit(pygame.transform.scale(img, [32,32]), [size[1]+4, img.get_height()+1])
+		surface.blit(img_copy, [size[1]+4, img.get_height()+36+166])
+		surface.blit(pygame.transform.scale(img_copy, [32,32]), [size[1]+4, img.get_height()*2+38+166])
+		
+		pygame.draw.line(surface, colours["grey"], [size[1],0], [size[1],size[1]], 1)
 		
 		pygame.display.update()
 
@@ -86,6 +134,18 @@ def editor():
 			elif event.type == pygame.MOUSEBUTTONUP:
 				if event.button == 1: # 1 == Left
 					(px,py) = event.pos
+					
+					clickables = controls_clickables
+					for clickable in clickables:
+						if clickables[clickable].is_clicked(event.pos):
+							clickables[clickable].perform()
+							if clickable == "Clear":
+								for c in pixel_clickables:
+									pixel_clickables[c].colour = colours["black"]
+							if clickable == "Restore":
+								for p in pixel_clickables:
+									pixel_clickables[p].colour = img.get_at(p)
+					
 					clickables = colour_clickables
 					for clickable in clickables:
 						# print clickable
@@ -96,5 +156,6 @@ def editor():
 						if clickables[clickable].is_clicked(event.pos):
 							if selected is not None:
 								clickables[clickable].colour = selected.colour
+								img.set_at(clickable, selected.colour)
 
 editor()
