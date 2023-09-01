@@ -1,4 +1,6 @@
 #  @TheWorldFoundry
+import time
+
 import pygame
 pygame.init()
 
@@ -8,11 +10,17 @@ class Clickable:
 	def __init__(self, pos, size, colour, method, icon):
 		self.pos = pos
 		self.size = size
+		self.size_original = [size[0],size[1]]
 		self.colour = colour
 		self.colour_border = [0x00, 0x00, 0x00, 0xff]
 		self.method = method
 		self.icon = icon
-		
+		self.age = 0
+	
+	def half_size(self):
+		self.size[0] = self.size_original[0] >> 1
+		self.size[1] = self.size_original[1] >> 1
+	
 	def is_clicked(self, click_pos):
 		# is the click_pos within the clickable?
 		result = True
@@ -21,22 +29,30 @@ class Clickable:
 		return result
 	
 	def draw(self, surface, origin):
+		self.age += 1
+		dx = (self.size_original[0]-self.size[0])>>1
+		dy = (self.size_original[1]-self.size[1])>>1
 		if self.icon == None:  # No icon? draw the colour
-			pygame.draw.rect(surface, self.colour, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]])
-			pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]],1)
+			pygame.draw.rect(surface, self.colour, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]])
+			pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]],1)
 		else:
-			surface.blit(pygame.transform.scale(self.icon, self.size), [origin[0]+self.pos[0], origin[1]+self.pos[1]])
+			surface.blit(pygame.transform.scale(self.icon, self.size), [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy])
+		if self.size[0] < self.size_original[0] and self.age%5 == 0:
+			self.size[0] += 1
+			self.size[1] += 1
 
 	def perform(self):
 		self.method()
 
 #  Globals
-img_sz = [8,8]
-img = pygame.Surface(img_sz, pygame.SRCALPHA)
+working_file = "_curimage.png"
+img = pygame.image.load(working_file)  # pygame.Surface(img_sz, pygame.SRCALPHA)
+img_sz = [img.get_width(),img.get_height()]
 img_copy = pygame.Surface(img_sz, pygame.SRCALPHA)
 
 def save():
-	pygame.image.save(img, "image.png")
+	pygame.image.save(img, "image_"+str(time.time()).replace(".","_")+".png")
+	pygame.image.save(img, working_file)
 
 def clear():
 	img.fill([0x00, 0x00, 0x00, 0xff])
@@ -73,6 +89,30 @@ def editor():
 		"blue-grey"      : [0x70, 0x92, 0xbe, 0xff],
 		"lavender"       : [0xc8, 0xbf, 0xe7, 0xff]
 	}
+	colours_ordered = [
+		"black",
+		"white",
+		"light yellow",
+		"rose",
+		"lavender",
+		"light grey",
+		"grey",
+		"brown",
+		"dark red",
+		"red",
+
+		"orange",
+		"yellow",
+		"gold",
+
+		"lime",
+		"green",
+		"turquoise",
+		"light turquoise",
+		"blue-grey",
+		"indigo",
+		"purple"
+	]
 	save_icon = pygame.image.load("save.png")
 	clear_icon = pygame.image.load("clear.png")
 	store_icon = pygame.image.load("store.png")
@@ -91,7 +131,7 @@ def editor():
 	colour_clickables = {}
 	h = int(size[1]/len(colours))
 	y = 0
-	for colour in colours:
+	for colour in colours_ordered:
 		colour_clickables[colour] = Clickable([size[0]-h,y],[h,h],colours[colour], None, None)
 		y += h
 	#  print colour_clickables
@@ -102,18 +142,22 @@ def editor():
 	h = int(size[1]/character_size[0])
 	for y in xrange(0, character_size[1]):
 		for x in xrange(0, character_size[0]):
-			pixel_clickables[(x, y)] = Clickable([x*h,y*h],[h,h],colours["light yellow"], None, None)
-	img.fill(colours["light yellow"])
+			# pixel_clickables[(x, y)] = Clickable([x*h,y*h],[h,h],colours["light yellow"], None, None)
+			pixel_clickables[(x, y)] = Clickable([x*h,y*h],[h,h],img.get_at((x,y)), None, None)
+	# img.fill(colours["light yellow"])
 	
 	surface = pygame.display.set_mode(size, pygame.SRCALPHA)
 	
 	selected = None
 	
+	logo = pygame.image.load("logo.png")
 	# Gameloop
 	keepGoing = True
 	iterations = 0
 	while keepGoing:
 		iterations += 1
+		surface.fill(colours["black"])
+		
 		
 		for clickables in [colour_clickables, pixel_clickables, controls_clickables]:
 			for clickable in clickables:
@@ -125,6 +169,10 @@ def editor():
 		surface.blit(pygame.transform.scale(img_copy, [32,32]), [size[1]+4, img.get_height()*2+38+166])
 		
 		pygame.draw.line(surface, colours["grey"], [size[1],0], [size[1],size[1]], 1)
+
+		if iterations < 1000:
+			surface.blit(logo, [(size[1]>>1)-(logo.get_width()>>1), (size[1]>>1)-(logo.get_height()>>1)])
+
 		
 		pygame.display.update()
 
@@ -138,6 +186,7 @@ def editor():
 					clickables = controls_clickables
 					for clickable in clickables:
 						if clickables[clickable].is_clicked(event.pos):
+							clickables[clickable].half_size()
 							clickables[clickable].perform()
 							if clickable == "Clear":
 								for c in pixel_clickables:
@@ -150,12 +199,18 @@ def editor():
 					for clickable in clickables:
 						# print clickable
 						if clickables[clickable].is_clicked(event.pos):
+							if selected is not None:
+								selected.colour_border = colours["black"]
 							selected = clickables[clickable]
+							selected.colour_border = colours["white"]
+							selected.half_size()
+
 					clickables = pixel_clickables
 					for clickable in clickables:
 						if clickables[clickable].is_clicked(event.pos):
 							if selected is not None:
 								clickables[clickable].colour = selected.colour
 								img.set_at(clickable, selected.colour)
+								clickables[clickable].half_size()
 
 editor()
