@@ -37,7 +37,7 @@ class Clickable:
 			pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]],1)
 		else:
 			surface.blit(pygame.transform.scale(self.icon, self.size), [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy])
-		if self.size[0] < self.size_original[0] and self.age%5 == 0:
+		if self.size[0] < self.size_original[0] and self.age%1 == 0:
 			self.size[0] += 1
 			self.size[1] += 1
 
@@ -110,6 +110,9 @@ def picker():
 def dice():
 	pass
 
+def transparent():
+	pass
+
 def editor():
 	size = [880,800]
 	
@@ -134,7 +137,8 @@ def editor():
 		"lime"           : [0xb5, 0xe6, 0x1d, 0xff],
 		"light turquoise": [0x99, 0xd9, 0xea, 0xff],
 		"blue-grey"      : [0x70, 0x92, 0xbe, 0xff],
-		"lavender"       : [0xc8, 0xbf, 0xe7, 0xff]
+		"lavender"       : [0xc8, 0xbf, 0xe7, 0xff],
+		"transparent"    : [0x00, 0x00, 0x00, 0x00]
 	}
 	colours_ordered = [
 		"black",
@@ -158,7 +162,8 @@ def editor():
 		"light turquoise",
 		"blue-grey",
 		"indigo",
-		"purple"
+		"purple",
+		"transparent"
 	]
 	save_icon = pygame.image.load("save.png")
 	clear_icon = pygame.image.load("clear.png")
@@ -173,7 +178,6 @@ def editor():
 	mirrorv_icon = pygame.image.load("mirrorv.png")
 	picker_icon = pygame.image.load("picker.png")
 	dice_icon = pygame.image.load("dice.png")
-	
 	
 	controls_clickables = {}
 	controls = [ ("Save", "lime", save, save_icon),
@@ -225,10 +229,15 @@ def editor():
 	keepGoing = True
 	iterations = 0
 	picker_active = False
+	clock = pygame.time.Clock()
+	
+	underlay = pygame.image.load("underlay.png")
+	
 	while keepGoing:
 		iterations += 1
-		surface.fill(colours["black"])
 		
+		surface.fill(colours["black"])
+		surface.blit(underlay,[0,0])
 		
 		for clickables in [colour_clickables, pixel_clickables, controls_clickables]:
 			for clickable in clickables:
@@ -308,5 +317,5 @@ def editor():
 								clickables[clickable].colour = selected.colour
 								img.set_at(clickable, selected.colour)
 								clickables[clickable].half_size()
-
+		clock.tick(30)
 editor()

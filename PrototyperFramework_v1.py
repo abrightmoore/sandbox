@@ -1,6 +1,7 @@
 #  @TheWorldFoundry
 
 import pygame
+import time
 import math
 import random
 import glob
@@ -79,6 +80,8 @@ class View2DLens:
 		self.things = {}
 		self.invalidate()
 		self.colour_bg = (0,0,0,255)
+		self.display_scale_factor_x = 1.0  # When the view gets drawn, this holds the 'scale' applied
+		self.display_scale_factor_y = 1.0
 
 	def invalidate(self):
 		self.surface_cache = None
@@ -173,6 +176,23 @@ class View2DLens:
 		self.surface_cache = surface
 		return surface
 
+class Clickable:
+	''' An onscreen bitmap dimensioned element that can be checked to see if it has been clicked
+	'''
+	def __init__(self, pos, size):
+		self.pos = pos
+		self.size = size
+		
+	def is_clicked(self, click_pos):
+		# is the click_pos within the clickable?
+		result = True
+		for i in xrange(0, len(click_pos)):  # Check if each dimension is within bounds
+			result = result and (self.pos[i] <= click_pos[i] < self.pos[i]+self.size[i])
+		return result
+	
+	def draw(self, surface, colour, origin):
+		pygame.draw.rect(surface, colour, [origin[0]+self.pos[0], origin[1]+self.pos[1], self.size[0], self.size[1]], 0)
+
 class RendererLens:
 	#  The renderer draws the view to the display at the intended position and location.
 	def __init__(self, display):
@@ -187,7 +207,12 @@ class RendererLens:
 		#  draws the nominated view into the rectangle zone on the display, scaling as appropriate
 		
 		# Handle scaling the 
-		self.display.blit(pygame.transform.scale(self.view.get_image2D(None), size), pos)
+		img = self.view.get_image2D(None)
+		self.display.blit(pygame.transform.scale(img, size), pos)
+		sx, sy = size
+		self.view.display_scale_factor_x = float(sx)/float(img.get_width())  #  Cache the scale factor on the view we've rendered
+		self.view.display_scale_factor_y = float(sx)/float(img.get_height())
+		
 
 class Tiles:
 	def __init__(self):
@@ -208,6 +233,15 @@ class Tiles:
 			fn = fn.replace(".png","")
 			t = method(fn)
 			self.add(fn, t)
+
+class TileAssets:
+	def __init__(self, namespace):
+		self.namespace = namespace
+		self.tiles = Tiles()
+		self.tiles.create_from_dir(namespace, CharacterCellLens)
+	
+	def get(self, id):
+		return self.tiles.get(self.namespace+" "+id)
 
 class Font:
 	def __init__(self, directory):
@@ -249,7 +283,218 @@ class Score:
 	def add(self, delta):
 		self.value += delta
 
+class Entity:
+	''' An instance of a tile with a position
+		Movement goes here
+		Responding to Input intents goes here
+	'''
+	def __init__(self, id, tile_type, pos):
+		self.id = id
+		self.tile_type = tile_type  # I want to know what this is so I can examine its properties
+		self.pos = pos  # Where in the world is this thing x,y coords
+		
+
 # Custom stuff
+
+def space_station_horror_game():
+	size = width,height = 800,800  # Pygame. This is the 'screen' size
+	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
+	r.set_view(View2DLens())
+	play_size = 40  # This is how many 'cells' are in the play area. It doesn't HAVE to be square, but why make life hard?
+	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
+
+	# Set up tiles
+	namespace = "space_station_horror_game"  #  This is the namespace of the assets for this game
+	
+	tiles = TileAssets(namespace)
+	#  tiles = Tiles()  # 
+	#  tiles.create_from_dir(namespace, CharacterCellLens)
+	r.view.cell_width = r.view.cell_height = 16
+
+	player = tiles.get("player")
+	wall = tiles.get("wall")
+	coins = tiles.get("coins")
+	floor = tiles.get("floor")
+	#player = tiles.get(namespace+" player")
+	#wall = tiles.get(namespace+" wall")
+	#coins = tiles.get(namespace+" coins")
+	#floor = tiles.get(namespace+" floor")
+	
+	player_pos = play_size>>1, play_size>>1  # Player starts in the middle
+	
+	r.view.fill_area(floor, [0, 0], [play_size, play_size], 1.0 )
+	r.view.fill_area(coins, [0, 0], [play_size, play_size], 0.04 )
+	r.view.fill_area(wall, [0, 0], [play_size, play_size], 0.4 )
+	for y in xrange((play_size>>1)-2, (play_size>>1)+3):
+		for x in xrange((play_size>>1)-2, (play_size>>1)+3):
+			r.view.erase_at((x,y))
+	r.view.fill_area(floor, [(play_size>>1)-2, (play_size>>1)-2], [5, 5], 1.0 )
+	r.view.set_at(player_pos, player)
+	
+	font = Font("font")
+	lbl_game_over = Label("game_over", font)
+	lbl_score = Label("score_", font)
+	lbl_lives = Label("lives_", font)
+	score_lives = Score("lives", 1, 1, font)
+	score_points = Score("score", 0, 10, font)
+	
+	clock = pygame.time.Clock()
+	keepGoing = True
+	iterations = 0
+	pause = False
+	while keepGoing:
+		iterations += 1
+		
+		r.draw([0,0],[width, height])
+		
+		r.view.draw_label(lbl_lives, [0, 0])
+		r.view.draw_label(score_lives, [len(lbl_lives.text)+1, 0])
+		#r.view.erase_at((len(lbl_pilots.text)+2, play_size-1))
+		for x in xrange(0, score_lives.value):
+			r.view.erase_at((len(lbl_lives.text)+3+x, 0))
+			r.view.set_at((len(lbl_lives.text)+3+x, play_size-1), player)
+		r.view.draw_label(lbl_score, [0, play_size-1])
+		r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-1])
+
+			
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				keepGoing = False
+			elif event.type == pygame.MOUSEBUTTONUP:
+				if event.button == 1: # 1 == Left
+					(px,py) = event.pos
+					py = height-py  # Invert because bottom of screen is row 0
+					cell_x = int(px/(r.view.cell_width * r.view.display_scale_factor_x))
+					cell_y = int(py/(r.view.cell_height * r.view.display_scale_factor_y))
+					x,y = player_pos
+					new_player_pos = player_pos
+					if cell_x < x and 0 < x:  # Move left
+						new_player_pos = x-1, y
+					if cell_y > y and y < play_size-1:  # Move up
+						new_player_pos = x, y+1
+					if cell_x > x and x < play_size-1:  # Move right
+						new_player_pos = x+1, y
+					if cell_y < y and 0 < y:  # Move down
+						new_player_pos = x, y-1
+					target = r.view.get_at(new_player_pos)
+					if wall not in target:
+						if floor in target:
+							r.view.remove(player_pos, player)
+							r.view.set_at(new_player_pos, player)
+							if coins in target:
+								score_points.add(10)
+								r.view.remove(new_player_pos, coins)
+							player_pos = new_player_pos
+					
+					# Check what's in the new position
+					
+					
+
+					
+		clock.tick(30)
+
+space_station_horror_game()
+
+
+
+def oliver_maze_game():
+	size = width,height = 800,800  # Pygame
+	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
+	r.set_view(View2DLens())
+	play_size = 20
+	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
+
+	# Set up tiles
+	namespace = "maze_game"
+	tiles = Tiles()
+	tiles.create_from_dir(namespace, CharacterCellLens)
+	r.view.cell_width = r.view.cell_height = 16
+
+	player = tiles.get(namespace+" player")
+	wall = tiles.get(namespace+" wall")
+	coins = tiles.get(namespace+" coins")
+	floor = tiles.get(namespace+" floor")
+	
+	player_pos = play_size>>1, play_size>>1  # Player starts in the middle
+	
+	r.view.fill_area(floor, [0, 0], [play_size, play_size], 1.0 )
+	r.view.fill_area(coins, [0, 0], [play_size, play_size], 0.04 )
+	r.view.fill_area(wall, [0, 0], [play_size, play_size], 0.4 )
+	for y in xrange((play_size>>1)-2, (play_size>>1)+3):
+		for x in xrange((play_size>>1)-2, (play_size>>1)+3):
+			r.view.erase_at((x,y))
+	r.view.fill_area(floor, [(play_size>>1)-2, (play_size>>1)-2], [5, 5], 1.0 )
+	r.view.set_at(player_pos, player)
+	
+	font = Font("font")
+	lbl_game_over = Label("game_over", font)
+	lbl_score = Label("score_", font)
+	lbl_lives = Label("lives_", font)
+	score_lives = Score("lives", 1, 1, font)
+	score_points = Score("score", 0, 10, font)
+	
+	clock = pygame.time.Clock()
+	keepGoing = True
+	iterations = 0
+	pause = False
+	while keepGoing:
+		iterations += 1
+		
+		r.draw([0,0],[width, height])
+		
+		r.view.draw_label(lbl_lives, [0, 0])
+		r.view.draw_label(score_lives, [len(lbl_lives.text)+1, 0])
+		#r.view.erase_at((len(lbl_pilots.text)+2, play_size-1))
+		for x in xrange(0, score_lives.value):
+			r.view.erase_at((len(lbl_lives.text)+3+x, 0))
+			r.view.set_at((len(lbl_lives.text)+3+x, play_size-1), player)
+		r.view.draw_label(lbl_score, [0, play_size-1])
+		r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-1])
+
+			
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				keepGoing = False
+			elif event.type == pygame.MOUSEBUTTONUP:
+				if event.button == 1: # 1 == Left
+					(px,py) = event.pos
+					py = height-py  # Invert because bottom of screen is row 0
+					cell_x = int(px/(r.view.cell_width * r.view.display_scale_factor_x))
+					cell_y = int(py/(r.view.cell_height * r.view.display_scale_factor_y))
+					x,y = player_pos
+					new_player_pos = player_pos
+					if cell_x < x and 0 < x:  # Move left
+						new_player_pos = x-1, y
+					if cell_y > y and y < play_size-1:  # Move up
+						new_player_pos = x, y+1
+					if cell_x > x and x < play_size-1:  # Move right
+						new_player_pos = x+1, y
+					if cell_y < y and 0 < y:  # Move down
+						new_player_pos = x, y-1
+					target = r.view.get_at(new_player_pos)
+					if wall not in target:
+						if floor in target:
+							r.view.remove(player_pos, player)
+							r.view.set_at(new_player_pos, player)
+							if coins in target:
+								score_points.add(10)
+								r.view.remove(new_player_pos, coins)
+							player_pos = new_player_pos
+					
+					# Check what's in the new position
+					
+					
+
+					
+		clock.tick(30)
+
+oliver_maze_game()
+
+
 
 def saucer_attack():  #  Messing about space-themed salvage
 	size = width,height = 800,800  # Pygame
@@ -285,7 +530,7 @@ def saucer_attack():  #  Messing about space-themed salvage
 	lbl_start = Label("start", font)
 	lbl_score = Label("score_", font)
 	lbl_pilots = Label("pilots_", font)
-	score_pilots = Score("pilots", 3, 1, font)
+	score_pilots = Score("pilots", 1, 1, font)
 
 	score_points = Score("score", 0, 10, font)
 
@@ -313,8 +558,9 @@ def saucer_attack():  #  Messing about space-themed salvage
 			# Draw the screen
 			r.view.draw_label(lbl_pilots, [0, play_size-1])
 			r.view.draw_label(score_pilots, [len(lbl_pilots.text)+1, play_size-1])
+			#r.view.erase_at((len(lbl_pilots.text)+2, play_size-1))
 			for x in xrange(0, score_pilots.value):
-				r.view.erase_at((len(lbl_pilots.text)+3+x, play_size-1))			
+				r.view.erase_at((len(lbl_pilots.text)+3+x, play_size-1))
 				r.view.set_at((len(lbl_pilots.text)+3+x, play_size-1), pilot)
 			r.view.draw_label(lbl_score, [0, play_size-2])
 			r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-2])
