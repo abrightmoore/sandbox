@@ -18,8 +18,8 @@ class Clickable:
 		self.age = 0
 	
 	def half_size(self):
-		self.size[0] = self.size_original[0] >> 1
-		self.size[1] = self.size_original[1] >> 1
+		self.size[0] = self.size_original[0] #  >> 1
+		self.size[1] = self.size_original[1] #  >> 1
 	
 	def is_clicked(self, click_pos):
 		# is the click_pos within the clickable?
@@ -33,8 +33,10 @@ class Clickable:
 		dx = (self.size_original[0]-self.size[0])>>1
 		dy = (self.size_original[1]-self.size[1])>>1
 		if self.icon == None:  # No icon? draw the colour
-			pygame.draw.rect(surface, self.colour, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]])
-			pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]],1)
+			r,g,b,a = self.colour
+			if a > 0:  # Only draw if alpha > 0
+				pygame.draw.rect(surface, self.colour, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]])
+				pygame.draw.rect(surface, self.colour_border, [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy, self.size[0], self.size[1]],1)
 		else:
 			surface.blit(pygame.transform.scale(self.icon, self.size), [origin[0]+self.pos[0]+dx, origin[1]+self.pos[1]+dy])
 		if self.size[0] < self.size_original[0] and self.age%1 == 0:
@@ -114,7 +116,7 @@ def transparent():
 	pass
 
 def editor():
-	size = [880,800]
+	size = [768,688]
 	
 	# Set up a tool and colour palette
 	colours = {
@@ -232,34 +234,36 @@ def editor():
 	clock = pygame.time.Clock()
 	
 	underlay = pygame.image.load("underlay.png")
-	
+	changed = True
 	while keepGoing:
 		iterations += 1
 		
-		surface.fill(colours["black"])
-		surface.blit(underlay,[0,0])
-		
-		for clickables in [colour_clickables, pixel_clickables, controls_clickables]:
-			for clickable in clickables:
-				clickables[clickable].draw(surface, [0,0])
-		
-		surface.blit(img, [size[1]+4, 0])
-		surface.blit(pygame.transform.scale(img, [32,32]), [size[1]+4, img.get_height()+1])
-		surface.blit(img_copy, [size[1]+4, img.get_height()+36+166])
-		surface.blit(pygame.transform.scale(img_copy, [32,32]), [size[1]+4, img.get_height()*2+38+166])
-		
-		pygame.draw.line(surface, colours["grey"], [size[1],0], [size[1],size[1]], 1)
+		if changed == True:
+			surface.fill(colours["black"])
+			surface.blit(underlay,[0,0])
+			
+			for clickables in [colour_clickables, pixel_clickables, controls_clickables]:
+				for clickable in clickables:
+					clickables[clickable].draw(surface, [0,0])
+			
+			surface.blit(img, [size[1]+4, 0])
+			surface.blit(pygame.transform.scale(img, [32,32]), [size[1]+4, img.get_height()+1])
+			surface.blit(img_copy, [size[1]+4, img.get_height()+36+166])
+			surface.blit(pygame.transform.scale(img_copy, [32,32]), [size[1]+4, img.get_height()*2+38+166])
+			
+			pygame.draw.line(surface, colours["grey"], [size[1],0], [size[1],size[1]], 1)
 
-		if iterations < 1000:
-			surface.blit(logo, [(size[1]>>1)-(logo.get_width()>>1), (size[1]>>1)-(logo.get_height()>>1)])
-
-		
+			if iterations < 1000:
+				surface.blit(logo, [(size[1]>>1)-(logo.get_width()>>1), (size[1]>>1)-(logo.get_height()>>1)])
+			
 		pygame.display.update()
-
+		changed = False
+		# print "Frame", iterations
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
 				keepGoing = False
 			elif event.type == pygame.MOUSEBUTTONUP:
+				changed = True
 				if event.button == 1: # 1 == Left
 					(px,py) = event.pos
 					
