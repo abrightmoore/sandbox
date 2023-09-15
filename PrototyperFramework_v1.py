@@ -295,6 +295,100 @@ class Entity:
 		
 
 # Custom stuff
+def fantasy_map_game():
+	size = width,height = 800,800  # Pygame. This is the 'screen' size
+	r = RendererLens(pygame.display.set_mode(size, pygame.SRCALPHA))
+	r.set_view(View2DLens())
+	play_size = 40  # This is how many 'cells' are in the play area. It doesn't HAVE to be square, but why make life hard?
+	r.view.set_size( (play_size, play_size, 1, 1), (width/play_size, height/play_size))
+
+	# Set up tiles
+	namespace = "fantasy_map_game"  #  This is the namespace of the assets for this game
+	
+	tiles = TileAssets(namespace)
+	r.view.cell_width = r.view.cell_height = 16  # Pixel resolution for tiles
+	
+	player_pos = play_size>>1, play_size>>1  # Player starts in the middle
+	
+	r.view.fill_area(tiles.get("land"), [0, 0], [play_size, play_size], 1.0 )
+	r.view.fill_area(tiles.get("coins"), [0, 0], [play_size, play_size], 0.01 )
+	r.view.fill_area(tiles.get("water"), [0, 0], [play_size, play_size], 0.03 )
+	r.view.fill_area(tiles.get("woodland"), [0, 0], [play_size, play_size], 0.03 )
+	r.view.fill_area(tiles.get("mountain_range"), [0, 0], [play_size, play_size], 0.2 )
+	r.view.fill_area(tiles.get("mountain"), [0, 0], [play_size, play_size], 0.005 )
+	r.view.fill_area(tiles.get("city"), [0, 0], [play_size, play_size], 0.01 )
+	for y in xrange((play_size>>1)-2, (play_size>>1)+3):
+		for x in xrange((play_size>>1)-2, (play_size>>1)+3):
+			r.view.erase_at((x,y))
+	r.view.fill_area(tiles.get("land"), [(play_size>>1)-2, (play_size>>1)-2], [5, 5], 1.0 )
+	r.view.set_at(player_pos, tiles.get("player"))
+	
+	font = Font("font")
+	lbl_game_over = Label("game_over", font)
+	lbl_score = Label("score_", font)
+	lbl_lives = Label("lives_", font)
+	score_lives = Score("lives", 3, 1, font)
+	score_points = Score("score", 0, 10, font)
+	
+	clock = pygame.time.Clock()
+	keepGoing = True
+	iterations = 0
+	pause = False
+	while keepGoing:
+		iterations += 1
+		
+		r.draw([0,0],[width, height])
+		
+		r.view.draw_label(lbl_lives, [0, 0])
+		r.view.draw_label(score_lives, [len(lbl_lives.text)+1, 0])
+		#r.view.erase_at((len(lbl_pilots.text)+2, play_size-1))
+		for x in xrange(0, score_lives.value):
+			r.view.erase_at((len(lbl_lives.text)+3+x, 0))
+			r.view.set_at((len(lbl_lives.text)+3+x, play_size-1), tiles.get("player"))
+		r.view.draw_label(lbl_score, [0, play_size-1])
+		r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-1])
+
+		pygame.display.update()
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				keepGoing = False
+			elif event.type == pygame.MOUSEBUTTONUP:
+				if event.button == 1: # 1 == Left
+					(px,py) = event.pos
+					py = height-py  # Invert because bottom of screen is row 0
+					cell_x = int(px/(r.view.cell_width * r.view.display_scale_factor_x))
+					cell_y = int(py/(r.view.cell_height * r.view.display_scale_factor_y))
+					x,y = player_pos
+					new_player_pos = player_pos
+					if cell_x < x and 0 < x:  # Move left
+						new_player_pos = x-1, y
+					if cell_y > y and y < play_size-1:  # Move up
+						new_player_pos = x, y+1
+					if cell_x > x and x < play_size-1:  # Move right
+						new_player_pos = x+1, y
+					if cell_y < y and 0 < y:  # Move down
+						new_player_pos = x, y-1
+					target = r.view.get_at(new_player_pos)
+					if tiles.get("mountain_range") not in target and tiles.get("mountain") not in target and tiles.get("water") not in target:
+						if tiles.get("land") in target:
+							r.view.remove(player_pos, tiles.get("player"))
+							r.view.set_at(new_player_pos, tiles.get("player"))
+							if tiles.get("coins") in target:
+								r.view.remove(new_player_pos, tiles.get("coins"))
+								score_points.add(10)
+								target = r.view.get_at(new_player_pos)
+							player_pos = new_player_pos
+					
+					# Check what's in the new position
+					
+					
+
+					
+		clock.tick(30)
+
+fantasy_map_game()
+
 
 def space_station_horror_game():
 	size = width,height = 800,800  # Pygame. This is the 'screen' size
@@ -315,6 +409,7 @@ def space_station_horror_game():
 	wall = tiles.get("wall")
 	coins = tiles.get("coins")
 	floor = tiles.get("floor")
+	alien = tiles.get("mob")
 	#player = tiles.get(namespace+" player")
 	#wall = tiles.get(namespace+" wall")
 	#coins = tiles.get(namespace+" coins")
@@ -324,6 +419,7 @@ def space_station_horror_game():
 	
 	r.view.fill_area(floor, [0, 0], [play_size, play_size], 1.0 )
 	r.view.fill_area(coins, [0, 0], [play_size, play_size], 0.04 )
+	r.view.fill_area(alien, [0, 0], [play_size, play_size], 0.03 )
 	r.view.fill_area(wall, [0, 0], [play_size, play_size], 0.4 )
 	for y in xrange((play_size>>1)-2, (play_size>>1)+3):
 		for x in xrange((play_size>>1)-2, (play_size>>1)+3):
@@ -335,7 +431,7 @@ def space_station_horror_game():
 	lbl_game_over = Label("game_over", font)
 	lbl_score = Label("score_", font)
 	lbl_lives = Label("lives_", font)
-	score_lives = Score("lives", 1, 1, font)
+	score_lives = Score("lives", 3, 1, font)
 	score_points = Score("score", 0, 10, font)
 	
 	clock = pygame.time.Clock()
@@ -356,7 +452,18 @@ def space_station_horror_game():
 		r.view.draw_label(lbl_score, [0, play_size-1])
 		r.view.draw_label(score_points, [len(lbl_score.text)+2, play_size-1])
 
-			
+		x, y = player_pos
+		for dx in xrange(-1,2):
+			for dy in xrange(-1,2):
+				target = r.view.get_at((x+dx, y+dy))
+				if alien in target:
+					r.view.remove((x+dx, y+dy), alien)
+					score_lives.add(-1)
+					# Alert the player they have died
+					if score_lives.value < 1:
+						# Alert the player their mission is over
+						keepGoing = False
+		
 		pygame.display.update()
 
 		for event in pygame.event.get():
@@ -385,7 +492,7 @@ def space_station_horror_game():
 							r.view.set_at(new_player_pos, player)
 							if coins in target:
 								score_points.add(10)
-								r.view.remove(new_player_pos, coins)
+								target = r.view.get_at(new_player_pos)
 							player_pos = new_player_pos
 					
 					# Check what's in the new position
